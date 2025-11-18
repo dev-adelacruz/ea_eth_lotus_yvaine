@@ -1,6 +1,5 @@
 require 'rest-client'
 require 'json'
-require 'pry'
 require 'dotenv/load'
 
 API_KEY = ENV['API_KEY']
