@@ -1,0 +1,15 @@
+[Unit]
+Description=Trading Bot Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ea_eth
+EnvironmentFile=/home/ubuntu/ea_eth/.env
+ExecStart=/usr/bin/bundle exec ruby /home/ubuntu/ea_eth/ea.rb
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
