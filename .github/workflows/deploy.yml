@@ -1,0 +1,41 @@
+name: Deploy Trading Bot to AWS EC2
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          # Set up GitHub deploy key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_DEPLOY_KEY }}" > ~/.ssh/ea_eth_deploy_key
+          chmod 600 ~/.ssh/ea_eth_deploy_key
+          
+          # Configure SSH to use deploy key for GitHub
+          cat >> ~/.ssh/config << EOF
+          Host github.com
+            HostName github.com
+            User git
+            IdentityFile ~/.ssh/ea_eth_deploy_key
+            StrictHostKeyChecking no
+          EOF
+          
+          chmod 600 ~/.ssh/config
+          
+          cd /home/ubuntu/ea_eth
+          git pull origin main
+          bundle install --path vendor/bundle
+          sudo systemctl restart trading-bot
