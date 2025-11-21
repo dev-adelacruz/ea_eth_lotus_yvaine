@@ -19,23 +19,25 @@ jobs:
         username: ${{ secrets.EC2_USERNAME }}
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
-          # Set up GitHub deploy key
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_DEPLOY_KEY }}" > ~/.ssh/ea_eth_deploy_key
-          chmod 600 ~/.ssh/ea_eth_deploy_key
+          echo "🚀 Starting deployment..."
           
-          # Configure SSH to use deploy key for GitHub
-          cat >> ~/.ssh/config << EOF
-          Host github.com
-            HostName github.com
-            User git
-            IdentityFile ~/.ssh/ea_eth_deploy_key
-            StrictHostKeyChecking no
-          EOF
-          
-          chmod 600 ~/.ssh/config
-          
+          # Navigate to project directory
           cd /home/ubuntu/ea_eth
+          
+          # Stash any local changes and pull latest code
+          git stash
           git pull origin main
+          
+          # Install dependencies
+          echo "Installing dependencies..."
           bundle install --path vendor/bundle
-          sudo systemctl restart trading-bot
+          
+          # Restart the trading bot service
+          echo "Restarting trading bot service..."
+          sudo systemctl restart trading-bot.service
+          
+          # Verify service is running
+          echo "Checking service status..."
+          sudo systemctl status trading-bot.service --no-pager
+          
+          echo "✅ Deployment completed successfully!"
