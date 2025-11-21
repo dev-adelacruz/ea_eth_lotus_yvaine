@@ -2,6 +2,16 @@ require 'rest-client'
 require 'json'
 require 'dotenv/load'
 
+# Enable immediate flushing of logs
+$stdout.sync = true
+$stderr.sync = true
+
+# Custom logging function with timestamps
+def log(message)
+  timestamp = Time.now.strftime("%Y-%m-%d %H:%M:%S")
+  puts "[#{timestamp}] #{message}"
+end
+
 API_KEY = ENV['API_KEY']
 ACCOUNT_ID = ENV['ACCOUNT_ID']
 REGION_BASE_URL = ENV['REGION_BASE_URL']
@@ -62,7 +72,7 @@ def get_candles(timeframe='5m')
     candles = JSON.parse(response.body)
     candles
   rescue RestClient::ExceptionWithResponse => e
-    puts "Error fetching #{timeframe} candles: #{e.response}"
+    log("Error fetching #{timeframe} candles: #{e.response}")
     nil
   end
 end
@@ -77,7 +87,7 @@ def get_positions
     #   {"id"=>"2975249537", "platform"=>"mt5", "type"=>"POSITION_TYPE_BUY", "symbol"=>"ETHUSDm", "magic"=>0, "time"=>"2025-11-15T14:21:35.125Z", "brokerTime"=>"2025-11-15 14:21:35.125", "updateTime"=>"2025-11-15T14:21:35.125Z", "openPrice"=>3171.77, "volume"=>0.2, "swap"=>0, "commission"=>0, "realizedSwap"=>0, "realizedCommission"=>0, "unrealizedSwap"=>0, "unrealizedCommission"=>0, "reason"=>"POSITION_REASON_EXPERT", "currentPrice"=>3182.83, "currentTickValue"=>0.01, "realizedProfit"=>0, "unrealizedProfit"=>-0.36, "profit"=>-0.36, "accountCurrencyExchangeRate"=>1, "brokerComment"=>"Buds EA Beta version", "comment"=>"Buds EA Beta version", "updateSequenceNumber"=>1763216495125008}
     # ]
   rescue RestClient::ExceptionWithResponse => e
-    puts "Error fetching positions: #{e.response}"
+    log("Error fetching positions: #{e.response}")
     nil
   end
 end
@@ -98,10 +108,10 @@ def place_trade(type, volume, take_profit, relative_pips = false)
   begin
     response = RestClient.post(TRADE_URL, order_data, HEADERS)
     order_response = JSON.parse(response.body)
-    puts "Trade placed successfully: #{order_response}"
+    log("Trade placed successfully: #{order_response}")
     order_response
   rescue RestClient::ExceptionWithResponse => e
-    puts "Error placing order: #{e.response}"
+    log("Error placing order: #{e.response}")
   end
 end
 
@@ -115,9 +125,9 @@ def update_trade(position, take_profit)
   begin
     response = RestClient.post(TRADE_URL, order_data, HEADERS)
     order_response = JSON.parse(response.body)
-    puts "Position updated successfully: #{order_response}"
+    log("Position updated successfully: #{order_response}")
   rescue RestClient::ExceptionWithResponse => e
-    puts "Error placing order: #{e.response}"
+    log("Error placing order: #{e.response}")
   end
 end
 
@@ -140,10 +150,10 @@ def should_place_trade?(positions)
   trade_type = latest_position['type']
 
   if (trade_type == 'POSITION_TYPE_BUY' && next_potential_position > latest_price) || (trade_type == 'POSITION_TYPE_SELL' && next_potential_position < latest_price)
-    puts "EXECUTE TRADE -> PRICE: #{latest_price}, TYPE: #{trade_type}, LOT_SIZE: #{next_potential_lot_size}"
+    log("EXECUTE TRADE -> PRICE: #{latest_price}, TYPE: #{trade_type}, LOT_SIZE: #{next_potential_lot_size}")
     return true
   else
-    puts "PRICE: #{latest_price}, NEXT POSITION: #{next_potential_position}, TIME: #{DateTime.now.strftime("%m/%d/%y %l:%M %p")}"
+    log("PRICE: #{latest_price}, NEXT POSITION: #{next_potential_position}, TIME: #{DateTime.now.strftime("%m/%d/%y %l:%M %p")}")
     return false
   end
 end
@@ -216,12 +226,12 @@ def enhanced_trading_decision
   analysis = enhanced_trend_analysis
   
   # Log the enhanced analysis for testing
-  puts "=== ENHANCED ANALYSIS ==="
-  puts "Trend: #{analysis[:trend]}"
-  puts "Confidence: #{analysis[:confidence]}"
-  puts "RSI: #{analysis[:rsi]}"
-  puts "Timeframe Alignment: #{analysis[:timeframe_alignment]}"
-  puts "========================="
+  log("=== ENHANCED ANALYSIS ===")
+  log("Trend: #{analysis[:trend]}")
+  log("Confidence: #{analysis[:confidence]}")
+  log("RSI: #{analysis[:rsi]}")
+  log("Timeframe Alignment: #{analysis[:timeframe_alignment]}")
+  log("=========================")
   
   # Return trading decision
   case analysis[:trend]
@@ -277,22 +287,22 @@ loop do
     enhanced_trade_type = enhanced_trading_decision
     
     # Compare signals
-    puts "=== SIGNAL COMPARISON ==="
-    puts "OLD: #{old_trend} -> #{old_trade_type}"
-    puts "ENHANCED: #{enhanced_analysis[:trend]} (#{enhanced_analysis[:confidence]}) -> #{enhanced_trade_type}"
-    puts "RSI: #{enhanced_analysis[:rsi]}"
+    log("=== SIGNAL COMPARISON ===")
+    log("OLD: #{old_trend} -> #{old_trade_type}")
+    log("ENHANCED: #{enhanced_analysis[:trend]} (#{enhanced_analysis[:confidence]}) -> #{enhanced_trade_type}")
+    log("RSI: #{enhanced_analysis[:rsi]}")
     
     # Track bad trades avoided
     if old_trade_type != enhanced_trade_type && enhanced_analysis[:confidence] == 'high'
       if (old_trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] > 70) || 
          (old_trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] < 30)
         $bad_trades_avoided += 1
-        puts "🚫 BAD TRADE AVOIDED! (RSI extreme)"
+        log("🚫 BAD TRADE AVOIDED! (RSI extreme)")
       end
     end
     
-    puts "Bad trades avoided: #{$bad_trades_avoided}/#{$total_analysis_cycles}"
-    puts "========================"
+    log("Bad trades avoided: #{$bad_trades_avoided}/#{$total_analysis_cycles}")
+    log("========================")
 
     # Decide which system to use for actual trading
     if ENABLE_ENHANCED_ANALYSIS
@@ -300,7 +310,7 @@ loop do
       if enhanced_trade_type
         place_trade(enhanced_trade_type, 0.1, 1000, true)
       else
-        puts "Enhanced analysis: No trade (low confidence)"
+        log("Enhanced analysis: No trade (low confidence)")
       end
     else
       # Use old system for trading (default - safe mode)
