@@ -255,6 +255,10 @@ loop do
   
   if positions.size > 0
     if should_place_trade?(positions)
+      # Define variables for martingale trading
+      trade_type = latest_position(positions)['type'] == 'POSITION_TYPE_BUY' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL'
+      next_potential_lot_size = first_position(positions)['volume'] * (positions.size + 1)
+      take_profit = next_take_profit(positions, next_potential_position(positions))
       place_trade(trade_type, next_potential_lot_size, take_profit)
       update_trades # update trades so positions will be accurate and tp will be calculated correctly
     end
