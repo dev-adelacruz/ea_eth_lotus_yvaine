@@ -7,6 +7,9 @@ ACCOUNT_ID = ENV['ACCOUNT_ID']
 REGION_BASE_URL = ENV['REGION_BASE_URL']
 REGION_MARKET_BASE_URL = ENV['REGION_MARKET_BASE_URL']
 
+# Enhanced configuration
+ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trading
+
 HEADERS = {
   'auth-token' => "#{API_KEY}",
   'Content-Type' => 'application/json'
@@ -21,14 +24,45 @@ TRADE_URL = "#{REGION_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/trade"
 # URL to retrieve candles
 CANDLES_URL = "#{REGION_MARKET_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/historical-market-data/symbols/ETHUSDm/timeframes/5m/candles"
 
-# Function to get current positions
-def get_candles
+# Enhanced technical analysis functions
+
+# Calculate RSI (Relative Strength Index)
+def calculate_rsi(prices, period=14)
+  return 50 if prices.length < period + 1  # Not enough data
+  
+  gains = []
+  losses = []
+  
+  # Calculate price changes
+  (1...prices.length).each do |i|
+    change = prices[i] - prices[i-1]
+    gains << [change, 0].max
+    losses << [change.abs, 0].max
+  end
+  
+  # Calculate average gains and losses for the period
+  avg_gain = gains.last(period).sum / period.to_f
+  avg_loss = losses.last(period).sum / period.to_f
+  
+  # Avoid division by zero
+  return 50 if avg_loss == 0
+  
+  # Calculate RSI
+  rs = avg_gain / avg_loss
+  rsi = 100 - (100 / (1 + rs))
+  rsi.round(2)
+end
+
+# Function to get candles for specified timeframe
+def get_candles(timeframe='5m')
+  candles_url = "#{REGION_MARKET_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/historical-market-data/symbols/ETHUSDm/timeframes/#{timeframe}/candles"
+  
   begin
-    response = RestClient.get(CANDLES_URL, HEADERS)
+    response = RestClient.get(candles_url, HEADERS)
     candles = JSON.parse(response.body)
     candles
   rescue RestClient::ExceptionWithResponse => e
-    puts "Error fetching candles: #{e.response}"
+    puts "Error fetching #{timeframe} candles: #{e.response}"
     nil
   end
 end
@@ -135,25 +169,93 @@ def next_take_profit(positions, new_position_price)
   prices / (positions.size + 1)
 end
 
+# Enhanced trend analysis with RSI and multiple timeframes
+def calculate_trend(candles)
+  return 'sideways' if candles.nil? || candles.empty?
+  
+  short_ma = candles.last(6).map{|candle| candle['close']}.sum / 6
+  long_ma = candles.last(60).map{|candle| candle['close']}.sum / 60
+  
+  if short_ma > long_ma
+    'uptrend'
+  elsif short_ma < long_ma
+    'downtrend'
+  else
+    'sideways'
+  end
+end
+
+# Enhanced trend analysis with RSI filtering and multiple timeframe confirmation
+def enhanced_trend_analysis
+  # Get candles for multiple timeframes
+  candles_5m = get_candles('5m')
+  candles_15m = get_candles('15m')
+  candles_1h = get_candles('1h')
+  
+  # Calculate trends for each timeframe
+  trend_5m = calculate_trend(candles_5m)
+  trend_15m = calculate_trend(candles_15m)
+  trend_1h = calculate_trend(candles_1h)
+  
+  # Calculate RSI for 5m (entry timeframe)
+  prices_5m = candles_5m.map { |c| c['close'] }
+  rsi_5m = calculate_rsi(prices_5m)
+  
+  # Determine overall trend with RSI filter
+  if trend_5m == 'uptrend' && trend_15m == 'uptrend' && trend_1h == 'uptrend' && rsi_5m < 70
+    { trend: 'uptrend', confidence: 'high', rsi: rsi_5m, timeframe_alignment: 'all_uptrend' }
+  elsif trend_5m == 'downtrend' && trend_15m == 'downtrend' && trend_1h == 'downtrend' && rsi_5m > 30
+    { trend: 'downtrend', confidence: 'high', rsi: rsi_5m, timeframe_alignment: 'all_downtrend' }
+  else
+    { trend: 'sideways', confidence: 'low', rsi: rsi_5m, timeframe_alignment: 'conflicting' }
+  end
+end
+
+# Enhanced trading decision with comprehensive logging
+def enhanced_trading_decision
+  analysis = enhanced_trend_analysis
+  
+  # Log the enhanced analysis for testing
+  puts "=== ENHANCED ANALYSIS ==="
+  puts "Trend: #{analysis[:trend]}"
+  puts "Confidence: #{analysis[:confidence]}"
+  puts "RSI: #{analysis[:rsi]}"
+  puts "Timeframe Alignment: #{analysis[:timeframe_alignment]}"
+  puts "========================="
+  
+  # Return trading decision
+  case analysis[:trend]
+  when 'uptrend'
+    'ORDER_TYPE_BUY'
+  when 'downtrend'
+    'ORDER_TYPE_SELL'
+  else
+    nil
+  end
+end
+
+# Performance tracking
+$bad_trades_avoided = 0
+$total_analysis_cycles = 0
+
 # Main loop to check positions every 5 minutes and place a trade if necessary
 loop do
   positions = get_positions
+  $total_analysis_cycles += 1
+  
   if positions.size > 0
     if should_place_trade?(positions)
-      latest_position = latest_position(positions)
-      next_potential_lot_size = first_position(positions)['volume'] * (positions.size + 1)
-      trade_type = latest_position['type'] == 'POSITION_TYPE_BUY' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL'
-      take_profit = next_take_profit(positions, latest_position['currentPrice'])
-
       place_trade(trade_type, next_potential_lot_size, take_profit)
       update_trades # update trades so positions will be accurate and tp will be calculated correctly
     end
   else
-    candles = get_candles
+    # Run both old and new analysis for comparison
+    candles = get_candles('5m')
     short_ma = candles.last(6).map{|candle| candle['close']}.sum / 6
     long_ma = candles.last(60).map{|candle| candle['close']}.sum / 60
     
-    trend = if short_ma > long_ma
+    # Old trend logic
+    old_trend = if short_ma > long_ma
       'uptrend'
     elsif short_ma < long_ma
       'downtrend'
@@ -161,9 +263,7 @@ loop do
       'sideways'
     end
 
-    puts "TREND: #{trend} (last 30 mins: #{short_ma}, last 5 hours: #{long_ma})"
-
-    trade_type = case trend
+    old_trade_type = case old_trend
     when 'uptrend'
       'ORDER_TYPE_BUY'
     when 'downtrend'
@@ -172,7 +272,42 @@ loop do
       nil
     end
 
-    place_trade(trade_type, 0.1, 1000, true)
+    # Enhanced analysis (always runs for logging)
+    enhanced_analysis = enhanced_trend_analysis
+    enhanced_trade_type = enhanced_trading_decision
+    
+    # Compare signals
+    puts "=== SIGNAL COMPARISON ==="
+    puts "OLD: #{old_trend} -> #{old_trade_type}"
+    puts "ENHANCED: #{enhanced_analysis[:trend]} (#{enhanced_analysis[:confidence]}) -> #{enhanced_trade_type}"
+    puts "RSI: #{enhanced_analysis[:rsi]}"
+    
+    # Track bad trades avoided
+    if old_trade_type != enhanced_trade_type && enhanced_analysis[:confidence] == 'high'
+      if (old_trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] > 70) || 
+         (old_trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] < 30)
+        $bad_trades_avoided += 1
+        puts "🚫 BAD TRADE AVOIDED! (RSI extreme)"
+      end
+    end
+    
+    puts "Bad trades avoided: #{$bad_trades_avoided}/#{$total_analysis_cycles}"
+    puts "========================"
+
+    # Decide which system to use for actual trading
+    if ENABLE_ENHANCED_ANALYSIS
+      # Use enhanced analysis for trading
+      if enhanced_trade_type
+        place_trade(enhanced_trade_type, 0.1, 1000, true)
+      else
+        puts "Enhanced analysis: No trade (low confidence)"
+      end
+    else
+      # Use old system for trading (default - safe mode)
+      if old_trade_type
+        place_trade(old_trade_type, 0.1, 1000, true)
+      end
+    end
   end
 
   # Sleep for n seconds before checking positions again
