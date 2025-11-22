@@ -325,5 +325,5 @@ loop do
   end
 
   # Sleep for n seconds before checking positions again
-  sleep(60)
+  sleep(300)
 end
