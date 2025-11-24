@@ -34,6 +34,7 @@ jobs:
           
           # Restart the trading bot service
           echo "Restarting trading bot service..."
+          sudo bash -c '> /home/ubuntu/ea_eth/bot.log'
           sudo systemctl restart trading-bot.service
           
           # Verify service is running
