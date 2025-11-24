@@ -195,6 +195,17 @@ def calculate_trend(candles)
   end
 end
 
+# Function to get daily high and low prices
+def get_daily_high_low
+  daily_candles = get_candles('1d')
+  return [nil, nil] if daily_candles.nil? || daily_candles.empty?
+  
+  # Get today's high and low from daily candles
+  daily_high = daily_candles.map { |c| c['high'] }.max
+  daily_low = daily_candles.map { |c| c['low'] }.min
+  [daily_high, daily_low]
+end
+
 # Enhanced trend analysis with RSI filtering and multiple timeframe confirmation
 def enhanced_trend_analysis
   # Get candles for multiple timeframes
@@ -211,13 +222,17 @@ def enhanced_trend_analysis
   prices_5m = candles_5m.map { |c| c['close'] }
   rsi_5m = calculate_rsi(prices_5m)
   
+  # Get current price and daily high/low
+  current_price = candles_5m.last['close']
+  daily_high, daily_low = get_daily_high_low
+  
   # Determine overall trend with RSI filter
   if trend_5m == 'uptrend' && trend_15m == 'uptrend' && trend_1h == 'uptrend' && rsi_5m < 70
-    { trend: 'uptrend', confidence: 'high', rsi: rsi_5m, timeframe_alignment: 'all_uptrend' }
+    { trend: 'uptrend', confidence: 'high', rsi: rsi_5m, timeframe_alignment: 'all_uptrend', current_price: current_price, daily_high: daily_high, daily_low: daily_low }
   elsif trend_5m == 'downtrend' && trend_15m == 'downtrend' && trend_1h == 'downtrend' && rsi_5m > 30
-    { trend: 'downtrend', confidence: 'high', rsi: rsi_5m, timeframe_alignment: 'all_downtrend' }
+    { trend: 'downtrend', confidence: 'high', rsi: rsi_5m, timeframe_alignment: 'all_downtrend', current_price: current_price, daily_high: daily_high, daily_low: daily_low }
   else
-    { trend: 'sideways', confidence: 'low', rsi: rsi_5m, timeframe_alignment: 'conflicting' }
+    { trend: 'sideways', confidence: 'low', rsi: rsi_5m, timeframe_alignment: 'conflicting', current_price: current_price, daily_high: daily_high, daily_low: daily_low }
   end
 end
 
@@ -312,7 +327,21 @@ loop do
     if ENABLE_ENHANCED_ANALYSIS
       # Use enhanced analysis for trading
       if enhanced_trade_type
-        place_trade(enhanced_trade_type, 0.1, 1000, true)
+        # EMERGENCY RSI BLOCK - Should never trade at extreme RSI levels
+        if (enhanced_trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] >= 65) || 
+           (enhanced_trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] <= 35)
+          log("🚫 EMERGENCY RSI BLOCK: RSI #{enhanced_analysis[:rsi]} too extreme for #{enhanced_trade_type}")
+        # DAILY HIGH FILTER - Prevent ceiling buying
+        elsif enhanced_trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:daily_high] && 
+              enhanced_analysis[:current_price] >= enhanced_analysis[:daily_high] * 0.995
+          log("🚫 DAILY HIGH BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily high #{enhanced_analysis[:daily_high]}")
+        # DAILY LOW FILTER - Prevent floor selling
+        elsif enhanced_trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:daily_low] && 
+              enhanced_analysis[:current_price] <= enhanced_analysis[:daily_low] * 1.005
+          log("🚫 DAILY LOW BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily low #{enhanced_analysis[:daily_low]}")
+        else
+          place_trade(enhanced_trade_type, 0.1, 1000, true)
+        end
       else
         log("Enhanced analysis: No trade (low confidence)")
       end
