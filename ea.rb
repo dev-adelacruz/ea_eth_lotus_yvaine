@@ -16,6 +16,7 @@ API_KEY = ENV['API_KEY']
 ACCOUNT_ID = ENV['ACCOUNT_ID']
 REGION_BASE_URL = ENV['REGION_BASE_URL']
 REGION_MARKET_BASE_URL = ENV['REGION_MARKET_BASE_URL']
+TAKE_PROFIT_BUFFER = ENV['TAKE_PROFIT_BUFFER']
 
 # Enhanced configuration
 ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trading
@@ -134,11 +135,15 @@ end
 def update_trades
   positions = get_positions
   prices = positions.map{|p| p['openPrice']}.sum
-  take_profit = prices / (positions.size)
+  take_profit = (prices / (positions.size)) + take_profit_buffer
 
   positions.each do |position|
     update_trade(position, take_profit)
   end
+end
+
+def take_profit_buffer
+  TAKE_PROFIT_BUFFER || 2
 end
 
 # Function to decide whether to place a trade
