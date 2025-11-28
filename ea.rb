@@ -135,7 +135,7 @@ end
 def update_trades
   positions = get_positions
   prices = positions.map{|p| p['openPrice']}.sum
-  take_profit = (prices / (positions.size)) + take_profit_buffer
+  take_profit = (prices / (positions.size)) + take_profit_buffer.to_f
 
   positions.each do |position|
     update_trade(position, take_profit)
