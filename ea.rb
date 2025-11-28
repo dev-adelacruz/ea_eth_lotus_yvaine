@@ -344,7 +344,7 @@ loop do
               enhanced_analysis[:current_price] <= enhanced_analysis[:daily_low] * 1.005
           log("🚫 DAILY LOW BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily low #{enhanced_analysis[:daily_low]}")
         else
-          place_trade(enhanced_trade_type, initial_lot_size, 1000, true)
+          place_trade(enhanced_trade_type, initial_lot_size.to_f, 1000, true)
         end
       else
         log("Enhanced analysis: No trade (low confidence)")
