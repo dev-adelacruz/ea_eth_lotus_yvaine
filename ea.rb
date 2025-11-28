@@ -17,6 +17,7 @@ ACCOUNT_ID = ENV['ACCOUNT_ID']
 REGION_BASE_URL = ENV['REGION_BASE_URL']
 REGION_MARKET_BASE_URL = ENV['REGION_MARKET_BASE_URL']
 TAKE_PROFIT_BUFFER = ENV['TAKE_PROFIT_BUFFER']
+INITIAL_LOT_SIZE = ENV['INITIAL_LOT_SIZE']
 
 # Enhanced configuration
 ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trading
@@ -91,6 +92,10 @@ def get_positions
     log("Error fetching positions: #{e.response}")
     nil
   end
+end
+
+def initial_lot_size
+  INITIAL_LOT_SIZE || 0.1
 end
 
 # Function to place a buy order
@@ -310,12 +315,6 @@ loop do
     enhanced_analysis = enhanced_trend_analysis
     enhanced_trade_type = enhanced_trading_decision
     
-    # Compare signals
-    log("=== SIGNAL COMPARISON ===")
-    log("OLD: #{old_trend} -> #{old_trade_type}")
-    log("ENHANCED: #{enhanced_analysis[:trend]} (#{enhanced_analysis[:confidence]}) -> #{enhanced_trade_type}")
-    log("RSI: #{enhanced_analysis[:rsi]}")
-    
     # Track bad trades avoided
     if old_trade_type != enhanced_trade_type && enhanced_analysis[:confidence] == 'high'
       if (old_trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] > 70) || 
@@ -345,7 +344,7 @@ loop do
               enhanced_analysis[:current_price] <= enhanced_analysis[:daily_low] * 1.005
           log("🚫 DAILY LOW BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily low #{enhanced_analysis[:daily_low]}")
         else
-          place_trade(enhanced_trade_type, 0.1, 1000, true)
+          place_trade(enhanced_trade_type, initial_lot_size, 1000, true)
         end
       else
         log("Enhanced analysis: No trade (low confidence)")
