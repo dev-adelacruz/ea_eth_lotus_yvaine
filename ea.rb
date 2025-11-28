@@ -1,6 +1,8 @@
 require 'rest-client'
 require 'json'
-require 'dotenv/load'
+require 'dotenv'
+env_file = ENV['DOTENV'] || '.env'
+Dotenv.load(env_file)
 
 # Enable immediate flushing of logs
 $stdout.sync = true
@@ -18,6 +20,7 @@ REGION_BASE_URL = ENV['REGION_BASE_URL']
 REGION_MARKET_BASE_URL = ENV['REGION_MARKET_BASE_URL']
 TAKE_PROFIT_BUFFER = ENV['TAKE_PROFIT_BUFFER']
 INITIAL_LOT_SIZE = ENV['INITIAL_LOT_SIZE']
+PAIR_SYMBOL = ENV['PAIR_SYMBOL']
 
 # Enhanced configuration
 ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trading
@@ -34,7 +37,7 @@ POSITIONS_URL = "#{REGION_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/positio
 TRADE_URL = "#{REGION_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/trade"
 
 # URL to retrieve candles
-CANDLES_URL = "#{REGION_MARKET_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/historical-market-data/symbols/ETHUSDm/timeframes/5m/candles"
+CANDLES_URL = "#{REGION_MARKET_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/historical-market-data/symbols/#{PAIR_SYMBOL}/timeframes/5m/candles"
 
 # Enhanced technical analysis functions
 
@@ -67,7 +70,7 @@ end
 
 # Function to get candles for specified timeframe
 def get_candles(timeframe='5m')
-  candles_url = "#{REGION_MARKET_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/historical-market-data/symbols/ETHUSDm/timeframes/#{timeframe}/candles"
+  candles_url = "#{REGION_MARKET_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/historical-market-data/symbols/#{PAIR_SYMBOL}/timeframes/#{timeframe}/candles"
   
   begin
     response = RestClient.get(candles_url, HEADERS)
@@ -102,7 +105,7 @@ end
 def place_trade(type, volume, take_profit, relative_pips = false)
   order_data = {
     "actionType" => type,
-    "symbol" => 'ETHUSDm',
+    "symbol" => PAIR_SYMBOL,
     "volume" => volume,
     "takeProfit" => take_profit,
     "comment" => "LOTUS EA BETA TESTING"
