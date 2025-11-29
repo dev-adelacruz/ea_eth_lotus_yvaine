@@ -23,7 +23,7 @@ INITIAL_LOT_SIZE = ENV['INITIAL_LOT_SIZE']
 PAIR_SYMBOL = ENV['PAIR_SYMBOL']
 
 # Enhanced configuration
-ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trading
+ENABLE_ENHANCED_ANALYSIS = false  # Set to true to use enhanced analysis for trading
 
 HEADERS = {
   'auth-token' => "#{API_KEY}",
@@ -355,7 +355,7 @@ loop do
     else
       # Use old system for trading (default - safe mode)
       if old_trade_type
-        place_trade(old_trade_type, 0.1, 1000, true)
+        place_trade(old_trade_type, initial_lot_size.to_f, 1000, true)
       end
     end
   end
