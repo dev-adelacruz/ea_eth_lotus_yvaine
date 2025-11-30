@@ -143,15 +143,16 @@ end
 def update_trades
   positions = get_positions
   prices = positions.map{|p| p['openPrice']}.sum
-  take_profit = (prices / (positions.size)) + take_profit_buffer.to_f
+  take_profit = (prices / (positions.size)) + take_profit_buffer(first_position(positions)['type']).to_f
 
   positions.each do |position|
     update_trade(position, take_profit)
   end
 end
 
-def take_profit_buffer
-  TAKE_PROFIT_BUFFER || 2
+def take_profit_buffer(trade_type)
+  tp_buffer = TAKE_PROFIT_BUFFER || 2
+  trade_type == 'POSITION_TYPE_BUY' ? (tp_buffer) : (0 - tp_buffer)
 end
 
 # Function to decide whether to place a trade
