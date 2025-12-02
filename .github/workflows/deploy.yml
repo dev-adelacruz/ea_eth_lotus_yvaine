@@ -22,7 +22,7 @@ jobs:
           echo "🚀 Starting deployment..."
           
           # Navigate to project directory
-          cd /home/ubuntu/ea_eth
+          cd /home/ubuntu/ea_eth_lotus_yvaine
           
           # Stash any local changes and pull latest code
           git stash
@@ -34,14 +34,11 @@ jobs:
           
           # Restart the trading bot service
           echo "Restarting trading bot service..."
-          sudo bash -c '> /home/ubuntu/ea_eth/bot.log'
-          sudo bash -c '> /home/ubuntu/ea_eth/bot-buds.log'
+          sudo bash -c '> /home/ubuntu/ea_eth_lotus_yvaine/bot.log'
           sudo systemctl restart trading-bot.service
-          sudo systemctl restart trading-bot-buds.service
           
           # Verify service is running
           echo "Checking service status..."
           sudo systemctl status trading-bot.service --no-pager
-          sudo systemctl status trading-bot-buds.service --no-pager
           
           echo "✅ Deployment completed successfully!"
