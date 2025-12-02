@@ -240,26 +240,81 @@ def enhanced_trend_analysis
   current_price = candles_5m.last['close']
   daily_high, daily_low = get_daily_high_low
   
-  # Determine overall trend with RSI filter
-  if trend_5m == 'uptrend' && trend_15m == 'uptrend' && trend_1h == 'uptrend' && rsi_5m < 70
-    { trend: 'uptrend', confidence: 'high', rsi: rsi_5m, timeframe_alignment: 'all_uptrend', current_price: current_price, daily_high: daily_high, daily_low: daily_low }
-  elsif trend_5m == 'downtrend' && trend_15m == 'downtrend' && trend_1h == 'downtrend' && rsi_5m > 30
-    { trend: 'downtrend', confidence: 'high', rsi: rsi_5m, timeframe_alignment: 'all_downtrend', current_price: current_price, daily_high: daily_high, daily_low: daily_low }
+  # Count trend agreements
+  uptrend_count = [trend_5m, trend_15m, trend_1h].count('uptrend')
+  downtrend_count = [trend_5m, trend_15m, trend_1h].count('downtrend')
+  total_agreements = uptrend_count + downtrend_count
+  
+  # Determine overall trend and confidence level
+  trend = 'sideways'
+  confidence = 'low'
+  confidence_reason = ''
+  timeframe_alignment = 'conflicting'
+  
+  if uptrend_count == 3 && rsi_5m < 70
+    trend = 'uptrend'
+    confidence = 'high'
+    confidence_reason = 'All 3 timeframes agree on uptrend, RSI not overbought'
+    timeframe_alignment = 'all_uptrend'
+  elsif downtrend_count == 3 && rsi_5m > 30
+    trend = 'downtrend'
+    confidence = 'high'
+    confidence_reason = 'All 3 timeframes agree on downtrend, RSI not oversold'
+    timeframe_alignment = 'all_downtrend'
+  elsif uptrend_count >= 2 && rsi_5m < 70
+    trend = 'uptrend'
+    confidence = 'medium'
+    confidence_reason = "Majority (#{uptrend_count}/3) timeframes show uptrend, RSI not overbought"
+    timeframe_alignment = 'majority_uptrend'
+  elsif downtrend_count >= 2 && rsi_5m > 30
+    trend = 'downtrend'
+    confidence = 'medium'
+    confidence_reason = "Majority (#{downtrend_count}/3) timeframes show downtrend, RSI not oversold"
+    timeframe_alignment = 'majority_downtrend'
   else
-    { trend: 'sideways', confidence: 'low', rsi: rsi_5m, timeframe_alignment: 'conflicting', current_price: current_price, daily_high: daily_high, daily_low: daily_low }
+    # Sideways or conflicting
+    if total_agreements == 0
+      confidence_reason = 'All timeframes show sideways movement'
+    elsif uptrend_count >= 2 && rsi_5m >= 70
+      confidence_reason = "Majority uptrend but RSI #{rsi_5m} >= 70 (overbought)"
+    elsif downtrend_count >= 2 && rsi_5m <= 30
+      confidence_reason = "Majority downtrend but RSI #{rsi_5m} <= 30 (oversold)"
+    else
+      confidence_reason = 'Conflicting timeframe signals'
+    end
   end
+  
+  {
+    trend: trend,
+    confidence: confidence,
+    confidence_reason: confidence_reason,
+    rsi: rsi_5m,
+    rsi_interpretation: rsi_5m < 30 ? 'oversold' : (rsi_5m > 70 ? 'overbought' : 'neutral'),
+    timeframe_alignment: timeframe_alignment,
+    timeframe_details: {
+      '5m': trend_5m,
+      '15m': trend_15m,
+      '1h': trend_1h
+    },
+    current_price: current_price,
+    daily_high: daily_high,
+    daily_low: daily_low
+  }
 end
 
 # Enhanced trading decision with comprehensive logging
 def enhanced_trading_decision
   analysis = enhanced_trend_analysis
   
-  # Log the enhanced analysis for testing
+  # Log the enhanced analysis with detailed breakdown
   log("=== ENHANCED ANALYSIS ===")
   log("Trend: #{analysis[:trend]}")
-  log("Confidence: #{analysis[:confidence]}")
-  log("RSI: #{analysis[:rsi]}")
+  log("Confidence: #{analysis[:confidence].upcase} - #{analysis[:confidence_reason]}")
+  log("RSI: #{analysis[:rsi]} (#{analysis[:rsi_interpretation]})")
+  log("Timeframe Details: 5m: #{analysis[:timeframe_details][:'5m']}, 15m: #{analysis[:timeframe_details][:'15m']}, 1h: #{analysis[:timeframe_details][:'1h']}")
   log("Timeframe Alignment: #{analysis[:timeframe_alignment]}")
+  log("Current Price: #{analysis[:current_price]}")
+  log("Daily High: #{analysis[:daily_high] || 'N/A'}, Daily Low: #{analysis[:daily_low] || 'N/A'}")
   log("=========================")
   
   # Return trading decision
@@ -269,7 +324,16 @@ def enhanced_trading_decision
   when 'downtrend'
     'ORDER_TYPE_SELL'
   else
-    nil
+    # Sideways market: use RSI extremes for mean reversion
+    if analysis[:rsi] < 30
+      log("Sideways market: RSI #{analysis[:rsi]} indicates oversold, triggering BUY")
+      'ORDER_TYPE_BUY'
+    elsif analysis[:rsi] > 70
+      log("Sideways market: RSI #{analysis[:rsi]} indicates overbought, triggering SELL")
+      'ORDER_TYPE_SELL'
+    else
+      nil
+    end
   end
 end
 
