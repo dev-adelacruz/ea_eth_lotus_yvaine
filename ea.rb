@@ -11,7 +11,7 @@ $stderr.sync = true
 # Custom logging function with timestamps
 def log(message)
   timestamp = Time.now.strftime("%Y-%m-%d %H:%M:%S")
-  puts "[#{timestamp}] #{message}"
+  puts "YVAINE:[#{timestamp}] #{message}"
 end
 
 API_KEY = ENV['API_KEY']
@@ -23,7 +23,7 @@ INITIAL_LOT_SIZE = ENV['INITIAL_LOT_SIZE']
 PAIR_SYMBOL = ENV['PAIR_SYMBOL']
 
 # Enhanced configuration
-ENABLE_ENHANCED_ANALYSIS = false  # Set to true to use enhanced analysis for trading
+ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trading
 
 HEADERS = {
   'auth-token' => "#{API_KEY}",
