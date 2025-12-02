@@ -214,10 +214,9 @@ def get_daily_high_low
   daily_candles = get_candles('1d')
   return [nil, nil] if daily_candles.nil? || daily_candles.empty?
   
-  # Get today's high and low from daily candles
-  daily_high = daily_candles.map { |c| c['high'] }.max
-  daily_low = daily_candles.map { |c| c['low'] }.min
-  [daily_high, daily_low]
+  # The last candle is the most recent (today's) daily candle
+  today_candle = daily_candles.last
+  [today_candle['high'], today_candle['low']]
 end
 
 # Enhanced trend analysis with RSI filtering and multiple timeframe confirmation
