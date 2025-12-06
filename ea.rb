@@ -211,12 +211,34 @@ end
 
 # Function to get daily high and low prices
 def get_daily_high_low
+  # Try to get 1h candles for today's intraday high/low
+  candles_1h = get_candles('1h')
+  if candles_1h && !candles_1h.empty?
+    require 'time'
+    now = Time.now.utc
+    today_candles = candles_1h.select do |candle|
+      candle_time = Time.parse(candle['time']).utc
+      candle_time.to_date == now.to_date
+    end
+    
+    if !today_candles.empty?
+      high = today_candles.map { |c| c['high'].to_f }.max
+      low = today_candles.map { |c| c['low'].to_f }.min
+      log("Using intraday high/low from 1h candles: high=#{high}, low=#{low}")
+      return [high, low]
+    end
+  end
+
+  # Fallback to daily candle if 1h candles not available or no today's candles
   daily_candles = get_candles('1d')
-  return [nil, nil] if daily_candles.nil? || daily_candles.empty?
-  
-  # The last candle is the most recent (today's) daily candle
-  today_candle = daily_candles.last
-  [today_candle['high'], today_candle['low']]
+  if daily_candles && !daily_candles.empty?
+    today_candle = daily_candles.last
+    log("Using daily candle high/low: high=#{today_candle['high']}, low=#{today_candle['low']}")
+    return [today_candle['high'], today_candle['low']]
+  end
+
+  log("No daily or 1h candles available for high/low")
+  [nil, nil]
 end
 
 # Enhanced trend analysis with RSI filtering and multiple timeframe confirmation
