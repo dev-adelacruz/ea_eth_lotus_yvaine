@@ -25,6 +25,12 @@ PAIR_SYMBOL = ENV['PAIR_SYMBOL']
 # Enhanced configuration
 ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trading
 
+# Advanced filter configuration
+ENABLE_CONSOLIDATION_FILTER = true      # Filter out trades during extreme consolidation
+ENABLE_VOLATILITY_FILTER = true         # Adjust for high volatility whipsaws
+ENABLE_4H_CONFIRMATION = false          # Require 4H timeframe alignment (default false per user request)
+FILTER_AGGRESSIVENESS = "MEDIUM"        # LOW, MEDIUM, HIGH (trade frequency vs quality)
+
 HEADERS = {
   'auth-token' => "#{API_KEY}",
   'Content-Type' => 'application/json'
@@ -68,6 +74,113 @@ def calculate_rsi(prices, period=14)
   rsi.round(2)
 end
 
+# Calculate Average True Range (ATR) for volatility measurement
+def calculate_atr(candles, period=14)
+  return nil if candles.nil? || candles.length < period + 1
+  
+  true_ranges = []
+  (1...candles.length).each do |i|
+    high = candles[i]['high'].to_f
+    low = candles[i]['low'].to_f
+    prev_close = candles[i-1]['close'].to_f
+        
+    tr1 = high - low
+    tr2 = (high - prev_close).abs
+    tr3 = (low - prev_close).abs
+        
+    true_ranges << [tr1, tr2, tr3].max
+  end
+  
+  # Simple moving average of true ranges
+  atr = true_ranges.last(period).sum / period.to_f
+  atr.round(4)
+end
+
+# Calculate Bollinger Band width ratio (for consolidation detection)
+def bollinger_band_width_ratio(candles, period=20, std_dev=2.0)
+  return nil if candles.nil? || candles.length < period
+  
+  closes = candles.last(period).map { |c| c['close'].to_f }
+  return nil if closes.empty?
+  
+  sma = closes.sum / closes.length.to_f
+  variance = closes.map { |c| (c - sma) ** 2 }.sum / closes.length.to_f
+  std = Math.sqrt(variance)
+  
+  upper_band = sma + (std_dev * std)
+  lower_band = sma - (std_dev * std)
+  band_width = upper_band - lower_band
+  width_ratio = band_width / sma  # relative width as percentage of price
+  
+  width_ratio
+end
+
+# Check if market is in consolidation (low volatility, ranging)
+def is_consolidating?(candles_5m, candles_1h)
+  return false unless ENABLE_CONSOLIDATION_FILTER
+  
+  # Use 1h candles for broader consolidation detection
+  return false if candles_1h.nil? || candles_1h.length < 20
+  
+  bb_width_ratio = bollinger_band_width_ratio(candles_1h, 20, 2.0)
+  return false if bb_width_ratio.nil?
+  
+  # Determine threshold based on aggressiveness
+  threshold = case FILTER_AGGRESSIVENESS
+              when "LOW" then 0.10   # 10% - only filter extreme consolidation
+              when "MEDIUM" then 0.15 # 15% - balanced
+              when "HIGH" then 0.20   # 20% - filter even moderate consolidation
+              else 0.15
+              end
+  
+  # Low BB width indicates consolidation
+  bb_width_ratio < threshold
+end
+
+# Check volatility conditions and adjust trend confidence
+def volatility_adjusted_trend(trend, candles_5m, current_price)
+  return trend unless ENABLE_VOLATILITY_FILTER
+  
+  atr = calculate_atr(candles_5m, 14)
+  return trend if atr.nil?
+  
+  # Get recent candles for MA calculation
+  return trend if candles_5m.length < 20
+  short_ma = candles_5m.last(6).map{|c| c['close'].to_f}.sum / 6
+  long_ma = candles_5m.last(20).map{|c| c['close'].to_f}.sum / 20
+  
+  # Determine if price is beyond MA by sufficient ATR multiple
+  atr_multiplier = case FILTER_AGGRESSIVENESS
+                   when "LOW" then 0.5
+                   when "MEDIUM" then 1.0
+                   when "HIGH" then 1.5
+                   else 1.0
+                   end
+  
+  required_distance = atr * atr_multiplier
+  
+  case trend
+  when 'uptrend'
+    # For uptrend, require price above MA by at least required_distance
+    (current_price - short_ma) >= required_distance ? 'uptrend' : 'sideways'
+  when 'downtrend'
+    # For downtrend, require price below MA by at least required_distance
+    (short_ma - current_price) >= required_distance ? 'downtrend' : 'sideways'
+  else
+    trend
+  end
+end
+
+# Get 4H trend for higher timeframe confirmation
+def get_4h_trend
+  return 'sideways' unless ENABLE_4H_CONFIRMATION
+  
+  candles_4h = get_candles('4h')
+  return 'sideways' if candles_4h.nil? || candles_4h.empty?
+  
+  calculate_trend(candles_4h)
+end
+
 # Function to get candles for specified timeframe
 def get_candles(timeframe='5m')
   candles_url = "#{REGION_MARKET_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/historical-market-data/symbols/#{PAIR_SYMBOL}/timeframes/#{timeframe}/candles"
@@ -108,7 +221,7 @@ def place_trade(type, volume, take_profit, relative_pips = false)
     "symbol" => PAIR_SYMBOL,
     "volume" => volume,
     "takeProfit" => take_profit,
-    "comment" => "LOTUS YVAINE BETA 0.0.1"
+    "comment" => "LOTUS YVAINE BETA 0.0.2"
   }
 
   order_data = order_data.merge("takeProfitUnits": "RELATIVE_PIPS") if relative_pips
@@ -282,16 +395,6 @@ def enhanced_trend_analysis
     confidence = 'high'
     confidence_reason = 'All 3 timeframes agree on downtrend, RSI not oversold'
     timeframe_alignment = 'all_downtrend'
-  elsif uptrend_count >= 2 && rsi_5m < 70
-    trend = 'uptrend'
-    confidence = 'medium'
-    confidence_reason = "Majority (#{uptrend_count}/3) timeframes show uptrend, RSI not overbought"
-    timeframe_alignment = 'majority_uptrend'
-  elsif downtrend_count >= 2 && rsi_5m > 30
-    trend = 'downtrend'
-    confidence = 'medium'
-    confidence_reason = "Majority (#{downtrend_count}/3) timeframes show downtrend, RSI not oversold"
-    timeframe_alignment = 'majority_downtrend'
   else
     # Sideways or conflicting
     if total_agreements == 0
@@ -301,8 +404,52 @@ def enhanced_trend_analysis
     elsif downtrend_count >= 2 && rsi_5m <= 30
       confidence_reason = "Majority downtrend but RSI #{rsi_5m} <= 30 (oversold)"
     else
-      confidence_reason = 'Conflicting timeframe signals'
+      confidence_reason = 'Conflicting timeframe signals (require all 3 timeframes aligned)'
     end
+  end
+
+  # Apply advanced filters
+  original_trend = trend
+  original_confidence = confidence
+
+  # 1. Consolidation filter
+  if ENABLE_CONSOLIDATION_FILTER && is_consolidating?(candles_5m, candles_1h)
+    trend = 'sideways'
+    confidence = 'low'
+    confidence_reason = 'Market in consolidation - avoiding trade'
+    log("CONSOLIDATION FILTER: Market is ranging, avoiding trade")
+  end
+
+  # 2. Volatility filter (adjust trend if too volatile)
+  if ENABLE_VOLATILITY_FILTER && (trend == 'uptrend' || trend == 'downtrend')
+    adjusted_trend = volatility_adjusted_trend(trend, candles_5m, current_price)
+    if adjusted_trend != trend
+      trend = adjusted_trend
+      confidence = 'low'
+      confidence_reason = 'Volatility too high for clear trend'
+      log("VOLATILITY FILTER: Trend adjusted due to high volatility")
+    end
+  end
+
+  # 3. 4H timeframe confirmation
+  if ENABLE_4H_CONFIRMATION && (trend == 'uptrend' || trend == 'downtrend')
+    trend_4h = get_4h_trend
+    if trend_4h != 'sideways' && trend_4h != trend
+      # 4H trend contradicts our trend
+      trend = 'sideways'
+      confidence = 'low'
+      confidence_reason = "4H trend (#{trend_4h}) contradicts lower timeframe trend"
+      log("4H CONFIRMATION FILTER: 4H trend #{trend_4h} contradicts, avoiding trade")
+    elsif trend_4h == trend
+      # 4H confirms, increase confidence
+      confidence = 'high' if confidence == 'medium'
+      confidence_reason = "#{confidence_reason} (confirmed by 4H)"
+    end
+  end
+
+  # Log filter application if any
+  if original_trend != trend || original_confidence != confidence
+    log("FILTERS APPLIED: Trend changed from #{original_trend} (#{original_confidence}) to #{trend} (#{confidence})")
   end
   
   {
@@ -323,7 +470,75 @@ def enhanced_trend_analysis
   }
 end
 
-# Enhanced trading decision with comprehensive logging
+# Calculate dynamic lot multiplier based on analysis confidence and conditions
+def lot_multiplier(analysis)
+  # Base multiplier for high confidence trades (all 3 timeframes aligned)
+  base_multiplier = 2.0
+  
+  # RSI bonus: optimal range 40-60 gets bonus
+  rsi_bonus = 0.0
+  if analysis[:rsi] >= 40 && analysis[:rsi] <= 60
+    rsi_bonus = 0.5
+  end
+  
+  # Filter bonus: each enabled filter that passed adds 0.15
+  filter_bonus = 0.0
+  enabled_filters = 0
+  passed_filters = 0
+  
+  # Check consolidation filter
+  if ENABLE_CONSOLIDATION_FILTER
+    enabled_filters += 1
+    # If we have a high confidence trade, consolidation filter must have passed
+    passed_filters += 1 if analysis[:confidence] == 'high'
+  end
+  
+  # Check volatility filter  
+  if ENABLE_VOLATILITY_FILTER
+    enabled_filters += 1
+    # If we have a high confidence trade, volatility filter must have passed
+    passed_filters += 1 if analysis[:confidence] == 'high'
+  end
+  
+  # Calculate filter bonus (0.15 per passed filter)
+  filter_bonus = passed_filters * 0.15
+  
+  # 4H confirmation bonus (if enabled and aligned)
+  four_hour_bonus = 0.0
+  if ENABLE_4H_CONFIRMATION && analysis[:confidence] == 'high'
+    # If 4H confirmation is enabled and we have high confidence, 4H must be aligned
+    four_hour_bonus = 0.5
+  end
+  
+  # Aggressiveness multiplier
+  aggressiveness_multiplier = case FILTER_AGGRESSIVENESS
+                              when "LOW" then 1.0
+                              when "MEDIUM" then 1.1
+                              when "HIGH" then 1.2
+                              else 1.0
+                              end
+  
+  # Calculate total multiplier
+  total_multiplier = (base_multiplier + rsi_bonus + filter_bonus + four_hour_bonus) * aggressiveness_multiplier
+  
+  # Cap at maximum 3.0
+  total_multiplier = [total_multiplier, 3.0].min
+  
+  # Never go below 0.5
+  total_multiplier = [total_multiplier, 0.5].max
+  
+  log("LOT MULTIPLIER CALCULATION:")
+  log("  Base: #{base_multiplier}")
+  log("  RSI bonus (#{analysis[:rsi]}): #{rsi_bonus}")
+  log("  Filter bonus (#{passed_filters}/#{enabled_filters} passed): #{filter_bonus}")
+  log("  4H bonus: #{four_hour_bonus}")
+  log("  Aggressiveness (#{FILTER_AGGRESSIVENESS}): #{aggressiveness_multiplier}")
+  log("  Total multiplier: #{total_multiplier.round(2)}")
+  
+  total_multiplier.round(2)
+end
+
+# Enhanced trading decision with comprehensive logging and dynamic lot sizing
 def enhanced_trading_decision
   analysis = enhanced_trend_analysis
   
@@ -338,23 +553,28 @@ def enhanced_trading_decision
   log("Daily High: #{analysis[:daily_high] || 'N/A'}, Daily Low: #{analysis[:daily_low] || 'N/A'}")
   log("=========================")
   
-  # Return trading decision
+  # Return trading decision with dynamic lot multiplier
   case analysis[:trend]
   when 'uptrend'
-    'ORDER_TYPE_BUY'
-  when 'downtrend'
-    'ORDER_TYPE_SELL'
-  else
-    # Sideways market: use RSI extremes for mean reversion
-    if analysis[:rsi] < 30
-      log("Sideways market: RSI #{analysis[:rsi]} indicates oversold, triggering BUY")
-      'ORDER_TYPE_BUY'
-    elsif analysis[:rsi] > 70
-      log("Sideways market: RSI #{analysis[:rsi]} indicates overbought, triggering SELL")
-      'ORDER_TYPE_SELL'
+    if analysis[:confidence] == 'high'
+      multiplier = lot_multiplier(analysis)
+      return { trade_type: 'ORDER_TYPE_BUY', multiplier: multiplier }
     else
-      nil
+      # No trade if not high confidence
+      return nil
     end
+  when 'downtrend'
+    if analysis[:confidence] == 'high'
+      multiplier = lot_multiplier(analysis)
+      return { trade_type: 'ORDER_TYPE_SELL', multiplier: multiplier }
+    else
+      # No trade if not high confidence
+      return nil
+    end
+  else
+    # Sideways market: NO TRADE (eliminated per user request)
+    log("Sideways market: No trade (RSI-based trades eliminated)")
+    return nil
   end
 end
 
@@ -403,10 +623,17 @@ loop do
 
       # Enhanced analysis (always runs for logging)
       enhanced_analysis = enhanced_trend_analysis
-      enhanced_trade_type = enhanced_trading_decision
+      decision = enhanced_trading_decision
       
       # Track bad trades avoided
-      if old_trade_type != enhanced_trade_type && enhanced_analysis[:confidence] == 'high'
+      # decision is a hash or nil. We need to get the trade_type from decision if it exists.
+      if decision && decision[:trade_type]
+        enhanced_trade_type_from_decision = decision[:trade_type]
+      else
+        enhanced_trade_type_from_decision = nil
+      end
+
+      if old_trade_type != enhanced_trade_type_from_decision && enhanced_analysis[:confidence] == 'high'
         if (old_trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] > 70) || 
           (old_trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] < 30)
           $bad_trades_avoided += 1
@@ -420,21 +647,24 @@ loop do
       # Decide which system to use for actual trading
       if ENABLE_ENHANCED_ANALYSIS
         # Use enhanced analysis for trading
-        if enhanced_trade_type
+        if decision && decision[:trade_type]
+          trade_type = decision[:trade_type]
+          multiplier = decision[:multiplier]
           # EMERGENCY RSI BLOCK - Should never trade at extreme RSI levels
-          if (enhanced_trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] >= 65) || 
-            (enhanced_trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] <= 35)
-            log("🚫 EMERGENCY RSI BLOCK: RSI #{enhanced_analysis[:rsi]} too extreme for #{enhanced_trade_type}")
+          if (trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] >= 65) || 
+            (trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] <= 35)
+            log("🚫 EMERGENCY RSI BLOCK: RSI #{enhanced_analysis[:rsi]} too extreme for #{trade_type}")
           # DAILY HIGH FILTER - Prevent ceiling buying
-          elsif enhanced_trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:daily_high] && 
+          elsif trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:daily_high] && 
                 enhanced_analysis[:current_price] >= enhanced_analysis[:daily_high] * 0.995
             log("🚫 DAILY HIGH BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily high #{enhanced_analysis[:daily_high]}")
           # DAILY LOW FILTER - Prevent floor selling
-          elsif enhanced_trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:daily_low] && 
+          elsif trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:daily_low] && 
                 enhanced_analysis[:current_price] <= enhanced_analysis[:daily_low] * 1.005
             log("🚫 DAILY LOW BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily low #{enhanced_analysis[:daily_low]}")
           else
-            place_trade(enhanced_trade_type, initial_lot_size.to_f, 1000, true)
+            dynamic_lot_size = initial_lot_size.to_f * multiplier
+            place_trade(trade_type, dynamic_lot_size, 1000, true)
           end
         else
           log("Enhanced analysis: No trade (low confidence)")
