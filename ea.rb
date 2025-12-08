@@ -151,8 +151,8 @@ def update_trades
 end
 
 def take_profit_buffer(trade_type)
-  tp_buffer = TAKE_PROFIT_BUFFER || 2
-  trade_type == 'POSITION_TYPE_BUY' ? (tp_buffer) : (0 - tp_buffer)
+  tp_buffer = (TAKE_PROFIT_BUFFER || 2).to_f
+  trade_type == 'POSITION_TYPE_BUY' ? tp_buffer : (0 - tp_buffer)
 end
 
 # Function to decide whether to place a trade
