@@ -448,6 +448,7 @@ loop do
     end
   rescue StandardError => e
     log("Error occurred: #{e.message}")
+    log("Backtrace (first 10): #{e.backtrace.first(10).join("\n")}")
   end
   
 
