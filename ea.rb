@@ -127,10 +127,10 @@ def is_consolidating?(candles_5m, candles_1h)
   
   # Determine threshold based on aggressiveness
   threshold = case FILTER_AGGRESSIVENESS
-              when "LOW" then 0.10   # 10% - only filter extreme consolidation
-              when "MEDIUM" then 0.15 # 15% - balanced
-              when "HIGH" then 0.20   # 20% - filter even moderate consolidation
-              else 0.15
+              when "LOW" then 0.0257   # 2.57% - filter extreme 20% consolidation (20th percentile)
+              when "MEDIUM" then 0.0369 # 3.69% - filter tightest 40% (40th percentile)
+              when "HIGH" then 0.0540   # 5.40% - filter tightest 60% (60th percentile)
+              else 0.0369
               end
   
   # Low BB width indicates consolidation
