@@ -20,7 +20,7 @@ REGION_BASE_URL = ENV['REGION_BASE_URL']
 REGION_MARKET_BASE_URL = ENV['REGION_MARKET_BASE_URL']
 TAKE_PROFIT_BUFFER = ENV['TAKE_PROFIT_BUFFER']
 INITIAL_LOT_SIZE = ENV['INITIAL_LOT_SIZE']
-PAIR_SYMBOL = ENV['PAIR_SYMBOL']
+PAIR_SYMBOL = ENV['PAIR_SYMBOL'] || 'ETHUSDm'
 
 # Enhanced configuration
 ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trading
@@ -221,7 +221,7 @@ def place_trade(type, volume, take_profit, relative_pips = false)
     "symbol" => PAIR_SYMBOL,
     "volume" => volume,
     "takeProfit" => take_profit,
-    "comment" => "LOTUS YVAINE BETA 0.0.2"
+    "comment" => "LOTUS YVAINE BETA 0.0.3"
   }
 
   order_data = order_data.merge("takeProfitUnits": "RELATIVE_PIPS") if relative_pips
@@ -614,14 +614,6 @@ end
         if (trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] >= 65) || 
           (trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] <= 35)
           log("🚫 EMERGENCY RSI BLOCK: RSI #{enhanced_analysis[:rsi]} too extreme for #{trade_type}")
-        # DAILY HIGH FILTER - Prevent ceiling buying
-        elsif trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:daily_high] && 
-              enhanced_analysis[:current_price] >= enhanced_analysis[:daily_high] * 0.995
-          log("🚫 DAILY HIGH BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily high #{enhanced_analysis[:daily_high]}")
-        # DAILY LOW FILTER - Prevent floor selling
-        elsif trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:daily_low] && 
-              enhanced_analysis[:current_price] <= enhanced_analysis[:daily_low] * 1.005
-          log("🚫 DAILY LOW BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily low #{enhanced_analysis[:daily_low]}")
         else
           dynamic_lot_size = initial_lot_size.to_f * multiplier
           place_trade(trade_type, dynamic_lot_size, 1000, true)
