@@ -578,15 +578,17 @@ def enhanced_trading_decision
   end
 end
 
-# Performance tracking
-$bad_trades_avoided = 0
-$total_analysis_cycles = 0
 
 # Main loop to check positions every 5 minutes and place a trade if necessary
-loop do
-  begin
-    positions = get_positions
-    $total_analysis_cycles += 1
+  loop do
+    begin
+      positions = get_positions
+      # If positions is nil (API error), skip this cycle
+      if positions.nil?
+        log("Skipping cycle due to API error in get_positions")
+        sleep(300)
+        next
+      end
     
     if positions.size > 0
       if should_place_trade?(positions)
@@ -598,82 +600,34 @@ loop do
         update_trades # update trades so positions will be accurate and tp will be calculated correctly
       end
     else
-      # Run both old and new analysis for comparison
-      candles = get_candles('5m')
-      short_ma = candles.last(6).map{|candle| candle['close']}.sum / 6
-      long_ma = candles.last(60).map{|candle| candle['close']}.sum / 60
-      
-      # Old trend logic
-      old_trend = if short_ma > long_ma
-        'uptrend'
-      elsif short_ma < long_ma
-        'downtrend'
-      else
-        'sideways'
-      end
-
-      old_trade_type = case old_trend
-      when 'uptrend'
-        'ORDER_TYPE_BUY'
-      when 'downtrend'
-        'ORDER_TYPE_SELL'
-      else
-        nil
-      end
-
-      # Enhanced analysis (always runs for logging)
+      # Run enhanced analysis for trading decision
       enhanced_analysis = enhanced_trend_analysis
       decision = enhanced_trading_decision
       
-      # Track bad trades avoided
-      # decision is a hash or nil. We need to get the trade_type from decision if it exists.
-      if decision && decision[:trade_type]
-        enhanced_trade_type_from_decision = decision[:trade_type]
-      else
-        enhanced_trade_type_from_decision = nil
-      end
-
-      if old_trade_type != enhanced_trade_type_from_decision && enhanced_analysis[:confidence] == 'high'
-        if (old_trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] > 70) || 
-          (old_trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] < 30)
-          $bad_trades_avoided += 1
-          log("🚫 BAD TRADE AVOIDED! (RSI extreme)")
-        end
-      end
-      
-      log("Bad trades avoided: #{$bad_trades_avoided}/#{$total_analysis_cycles}")
       log("========================")
 
-      # Decide which system to use for actual trading
-      if ENABLE_ENHANCED_ANALYSIS
-        # Use enhanced analysis for trading
-        if decision && decision[:trade_type]
-          trade_type = decision[:trade_type]
-          multiplier = decision[:multiplier]
-          # EMERGENCY RSI BLOCK - Should never trade at extreme RSI levels
-          if (trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] >= 65) || 
-            (trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] <= 35)
-            log("🚫 EMERGENCY RSI BLOCK: RSI #{enhanced_analysis[:rsi]} too extreme for #{trade_type}")
-          # DAILY HIGH FILTER - Prevent ceiling buying
-          elsif trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:daily_high] && 
-                enhanced_analysis[:current_price] >= enhanced_analysis[:daily_high] * 0.995
-            log("🚫 DAILY HIGH BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily high #{enhanced_analysis[:daily_high]}")
-          # DAILY LOW FILTER - Prevent floor selling
-          elsif trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:daily_low] && 
-                enhanced_analysis[:current_price] <= enhanced_analysis[:daily_low] * 1.005
-            log("🚫 DAILY LOW BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily low #{enhanced_analysis[:daily_low]}")
-          else
-            dynamic_lot_size = initial_lot_size.to_f * multiplier
-            place_trade(trade_type, dynamic_lot_size, 1000, true)
-          end
+      # Use enhanced analysis for trading
+      if decision && decision[:trade_type]
+        trade_type = decision[:trade_type]
+        multiplier = decision[:multiplier]
+        # EMERGENCY RSI BLOCK - Should never trade at extreme RSI levels
+        if (trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] >= 65) || 
+          (trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] <= 35)
+          log("🚫 EMERGENCY RSI BLOCK: RSI #{enhanced_analysis[:rsi]} too extreme for #{trade_type}")
+        # DAILY HIGH FILTER - Prevent ceiling buying
+        elsif trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:daily_high] && 
+              enhanced_analysis[:current_price] >= enhanced_analysis[:daily_high] * 0.995
+          log("🚫 DAILY HIGH BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily high #{enhanced_analysis[:daily_high]}")
+        # DAILY LOW FILTER - Prevent floor selling
+        elsif trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:daily_low] && 
+              enhanced_analysis[:current_price] <= enhanced_analysis[:daily_low] * 1.005
+          log("🚫 DAILY LOW BLOCK: Current price #{enhanced_analysis[:current_price]} too close to daily low #{enhanced_analysis[:daily_low]}")
         else
-          log("Enhanced analysis: No trade (low confidence)")
+          dynamic_lot_size = initial_lot_size.to_f * multiplier
+          place_trade(trade_type, dynamic_lot_size, 1000, true)
         end
       else
-        # Use old system for trading (default - safe mode)
-        if old_trade_type
-          place_trade(old_trade_type, initial_lot_size.to_f, 1000, true)
-        end
+        log("Enhanced analysis: No trade (low confidence)")
       end
     end
   rescue StandardError => e
