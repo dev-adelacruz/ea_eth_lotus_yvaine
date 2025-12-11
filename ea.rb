@@ -178,7 +178,7 @@ def get_4h_trend
   candles_4h = get_candles('4h')
   return 'sideways' if candles_4h.nil? || candles_4h.empty?
   
-  calculate_trend(candles_4h)
+  calculate_trend(candles_4h, '4h')
 end
 
 # Function to get candles for specified timeframe
@@ -307,11 +307,34 @@ def next_take_profit(positions, new_position_price)
 end
 
 # Enhanced trend analysis with RSI and multiple timeframes
-def calculate_trend(candles)
+def calculate_trend(candles, timeframe='5m')
   return 'sideways' if candles.nil? || candles.empty?
   
-  short_ma = candles.last(6).map{|candle| candle['close']}.sum / 6
-  long_ma = candles.last(60).map{|candle| candle['close']}.sum / 60
+  # Define timeframe-specific parameters
+  case timeframe
+  when '5m'
+    short_period = 12    # 1 hour of data (12 * 5m)
+    long_period = 72     # 6 hours of data (72 * 5m)
+  when '15m'
+    short_period = 8     # 2 hours of data (8 * 15m)
+    long_period = 32     # 8 hours of data (32 * 15m)
+  when '1h'
+    short_period = 20    # 20 hours ≈ 1 trading day
+    long_period = 50     # 50 hours ≈ 2 trading days
+  when '4h'
+    short_period = 10    # 40 hours ≈ 1.7 days
+    long_period = 30     # 120 hours ≈ 5 days
+  else
+    # Default to original values for unknown timeframes
+    short_period = 6
+    long_period = 60
+  end
+  
+  # Ensure we have enough data
+  return 'sideways' if candles.length < long_period
+  
+  short_ma = candles.last(short_period).map{|candle| candle['close'].to_f}.sum / short_period
+  long_ma = candles.last(long_period).map{|candle| candle['close'].to_f}.sum / long_period
   
   if short_ma > long_ma
     'uptrend'
@@ -362,9 +385,9 @@ def enhanced_trend_analysis
   candles_1h = get_candles('1h')
   
   # Calculate trends for each timeframe
-  trend_5m = calculate_trend(candles_5m)
-  trend_15m = calculate_trend(candles_15m)
-  trend_1h = calculate_trend(candles_1h)
+  trend_5m = calculate_trend(candles_5m, '5m')
+  trend_15m = calculate_trend(candles_15m, '15m')
+  trend_1h = calculate_trend(candles_1h, '1h')
   
   # Calculate RSI for 5m (entry timeframe)
   prices_5m = candles_5m.map { |c| c['close'] }
