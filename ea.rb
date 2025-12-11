@@ -652,5 +652,5 @@ end
   
 
   # Sleep for n seconds before checking positions again
-  sleep(1200)
+  sleep(300)
 end
