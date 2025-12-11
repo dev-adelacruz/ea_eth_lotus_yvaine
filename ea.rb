@@ -346,9 +346,9 @@ def calculate_trend(candles, timeframe='5m')
 end
 
 # Function to get daily high and low prices
-def get_daily_high_low
-  # Try to get 1h candles for today's intraday high/low
-  candles_1h = get_candles('1h')
+def get_daily_high_low(candles_1h_param = nil)
+  # Use provided 1h candles or fetch them
+  candles_1h = candles_1h_param || get_candles('1h')
   if candles_1h && !candles_1h.empty?
     require 'time'
     now = Time.now.utc
@@ -395,7 +395,7 @@ def enhanced_trend_analysis
   
   # Get current price and daily high/low
   current_price = candles_5m.last['close']
-  daily_high, daily_low = get_daily_high_low
+  daily_high, daily_low = get_daily_high_low(candles_1h)
   
   # Count trend agreements
   uptrend_count = [trend_5m, trend_15m, trend_1h].count('uptrend')
