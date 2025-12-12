@@ -60,7 +60,7 @@ CANDLES_URL = "#{REGION_MARKET_BASE_URL}/users/current/accounts/#{ACCOUNT_ID}/hi
 
 # Enhanced technical analysis functions
 
-# Calculate RSI (Relative Strength Index)
+# Calculate RSI (Relative Strength Index) using Wilder's smoothing (standard in MT5)
 def calculate_rsi(prices, period=14)
   return 50 if prices.length < period + 1  # Not enough data
   
@@ -74,9 +74,15 @@ def calculate_rsi(prices, period=14)
     losses << [change.abs, 0].max
   end
   
-  # Calculate average gains and losses for the period
-  avg_gain = gains.last(period).sum / period.to_f
-  avg_loss = losses.last(period).sum / period.to_f
+  # Initialize with first average
+  avg_gain = gains.first(period).sum / period.to_f
+  avg_loss = losses.first(period).sum / period.to_f
+  
+  # Apply Wilder's smoothing for remaining periods
+  (period...gains.length).each do |i|
+    avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+    avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+  end
   
   # Avoid division by zero
   return 50 if avg_loss == 0
@@ -650,8 +656,8 @@ end
         trade_type = decision[:trade_type]
         multiplier = decision[:multiplier]
         # EMERGENCY RSI BLOCK - Should never trade at extreme RSI levels
-        if (trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] >= 65) || 
-          (trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] <= 35)
+        if (trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] >= 67) || 
+          (trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] <= 33)
           log("🚫 EMERGENCY RSI BLOCK: RSI #{enhanced_analysis[:rsi]} too extreme for #{trade_type}")
         else
           dynamic_lot_size = initial_lot_size.to_f * multiplier
