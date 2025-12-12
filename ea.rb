@@ -14,6 +14,19 @@ def log(message)
   puts "YVAINE:[#{timestamp}] #{message}"
 end
 
+# Function to log enhanced analysis results
+def log_enhanced_analysis(analysis)
+  log("=== ENHANCED ANALYSIS ===")
+  log("Trend: #{analysis[:trend]}")
+  log("Confidence: #{analysis[:confidence].upcase} - #{analysis[:confidence_reason]}")
+  log("RSI: #{analysis[:rsi]} (#{analysis[:rsi_interpretation]})")
+  log("Timeframe Details: 5m: #{analysis[:timeframe_details][:'5m']}, 15m: #{analysis[:timeframe_details][:'15m']}, 1h: #{analysis[:timeframe_details][:'1h']}")
+  log("Timeframe Alignment: #{analysis[:timeframe_alignment]}")
+  log("Current Price: #{analysis[:current_price]}")
+  log("Daily High: #{analysis[:daily_high] || 'N/A'}, Daily Low: #{analysis[:daily_low] || 'N/A'}")
+  log("=========================")
+end
+
 API_KEY = ENV['API_KEY']
 ACCOUNT_ID = ENV['ACCOUNT_ID']
 REGION_BASE_URL = ENV['REGION_BASE_URL']
@@ -402,22 +415,32 @@ def enhanced_trend_analysis
   downtrend_count = [trend_5m, trend_15m, trend_1h].count('downtrend')
   total_agreements = uptrend_count + downtrend_count
   
+  # Determine timeframe alignment (based ONLY on timeframe agreement)
+  timeframe_alignment = if uptrend_count == 3
+    'all_uptrend'
+  elsif downtrend_count == 3
+    'all_downtrend'
+  elsif uptrend_count >= 2
+    'majority_uptrend'
+  elsif downtrend_count >= 2
+    'majority_downtrend'
+  else
+    'conflicting'
+  end
+  
   # Determine overall trend and confidence level
   trend = 'sideways'
   confidence = 'low'
   confidence_reason = ''
-  timeframe_alignment = 'conflicting'
   
   if uptrend_count == 3 && rsi_5m < 70
     trend = 'uptrend'
     confidence = 'high'
     confidence_reason = 'All 3 timeframes agree on uptrend, RSI not overbought'
-    timeframe_alignment = 'all_uptrend'
   elsif downtrend_count == 3 && rsi_5m > 30
     trend = 'downtrend'
     confidence = 'high'
     confidence_reason = 'All 3 timeframes agree on downtrend, RSI not oversold'
-    timeframe_alignment = 'all_downtrend'
   else
     # Sideways or conflicting
     if total_agreements == 0
@@ -562,19 +585,9 @@ def lot_multiplier(analysis)
 end
 
 # Enhanced trading decision with comprehensive logging and dynamic lot sizing
-def enhanced_trading_decision
-  analysis = enhanced_trend_analysis
-  
-  # Log the enhanced analysis with detailed breakdown
-  log("=== ENHANCED ANALYSIS ===")
-  log("Trend: #{analysis[:trend]}")
-  log("Confidence: #{analysis[:confidence].upcase} - #{analysis[:confidence_reason]}")
-  log("RSI: #{analysis[:rsi]} (#{analysis[:rsi_interpretation]})")
-  log("Timeframe Details: 5m: #{analysis[:timeframe_details][:'5m']}, 15m: #{analysis[:timeframe_details][:'15m']}, 1h: #{analysis[:timeframe_details][:'1h']}")
-  log("Timeframe Alignment: #{analysis[:timeframe_alignment]}")
-  log("Current Price: #{analysis[:current_price]}")
-  log("Daily High: #{analysis[:daily_high] || 'N/A'}, Daily Low: #{analysis[:daily_low] || 'N/A'}")
-  log("=========================")
+def enhanced_trading_decision(analysis = nil)
+  # Use provided analysis or compute it
+  analysis = analysis || enhanced_trend_analysis
   
   # Return trading decision with dynamic lot multiplier
   case analysis[:trend]
@@ -623,9 +636,12 @@ end
         update_trades # update trades so positions will be accurate and tp will be calculated correctly
       end
     else
-      # Run enhanced analysis for trading decision
+      # Run enhanced analysis for trading decision (once per cycle)
       enhanced_analysis = enhanced_trend_analysis
-      decision = enhanced_trading_decision
+      # Log the analysis once
+      log_enhanced_analysis(enhanced_analysis)
+      
+      decision = enhanced_trading_decision(enhanced_analysis)
       
       log("========================")
 
