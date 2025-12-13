@@ -157,7 +157,7 @@ def is_consolidating?(candles_5m, candles_1h)
 end
 
 # Check volatility conditions and adjust trend confidence
-def volatility_adjusted_trend(trend, candles_5m, current_price)
+def volatility_adjusted_trend(trend, candles_5m, current_price, confidence)
   return trend unless ENABLE_VOLATILITY_FILTER
   
   atr = calculate_atr(candles_5m, 14)
@@ -168,25 +168,40 @@ def volatility_adjusted_trend(trend, candles_5m, current_price)
   short_ma = candles_5m.last(6).map{|c| c['close'].to_f}.sum / 6
   long_ma = candles_5m.last(20).map{|c| c['close'].to_f}.sum / 20
   
-  # Determine if price is beyond MA by sufficient ATR multiple
-  atr_multiplier = case FILTER_AGGRESSIVENESS
+  # Base multiplier from global aggressiveness setting
+  base_multiplier = case FILTER_AGGRESSIVENESS
                    when "LOW" then 0.5
                    when "MEDIUM" then 1.0
                    when "HIGH" then 1.5
                    else 1.0
                    end
   
+  # Adjust multiplier for strong trends (high confidence) - use half the base multiplier
+  atr_multiplier = confidence == 'high' ? (base_multiplier * 0.5) : base_multiplier
+  
   required_distance = atr * atr_multiplier
   
   case trend
   when 'uptrend'
-    # For uptrend, require price above MA by at least required_distance
-    (current_price - short_ma) >= required_distance ? 'uptrend' : 'sideways'
+    actual_distance = current_price - short_ma
+    if actual_distance >= required_distance
+      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, Short MA=#{short_ma.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition PASSED")
+      return 'uptrend'
+    else
+      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, Short MA=#{short_ma.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition FAILED (price not above MA by required distance)")
+      return 'sideways'
+    end
   when 'downtrend'
-    # For downtrend, require price below MA by at least required_distance
-    (short_ma - current_price) >= required_distance ? 'downtrend' : 'sideways'
+    actual_distance = short_ma - current_price
+    if actual_distance >= required_distance
+      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, Short MA=#{short_ma.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition PASSED")
+      return 'downtrend'
+    else
+      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, Short MA=#{short_ma.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition FAILED (price not below MA by required distance)")
+      return 'sideways'
+    end
   else
-    trend
+    return trend
   end
 end
 
@@ -474,7 +489,7 @@ def enhanced_trend_analysis
 
   # 2. Volatility filter (adjust trend if too volatile)
   if ENABLE_VOLATILITY_FILTER && (trend == 'uptrend' || trend == 'downtrend')
-    adjusted_trend = volatility_adjusted_trend(trend, candles_5m, current_price)
+    adjusted_trend = volatility_adjusted_trend(trend, candles_5m, current_price, confidence)
     if adjusted_trend != trend
       trend = adjusted_trend
       confidence = 'low'
