@@ -168,6 +168,10 @@ def volatility_adjusted_trend(trend, candles_5m, current_price, confidence)
   short_ma = candles_5m.last(6).map{|c| c['close'].to_f}.sum / 6
   long_ma = candles_5m.last(20).map{|c| c['close'].to_f}.sum / 20
   
+  # Choose MA based on confidence: high confidence uses the longer MA (20-period)
+  ma_to_use = confidence == 'high' ? long_ma : short_ma
+  ma_name = confidence == 'high' ? 'Long MA (20)' : 'Short MA (6)'
+  
   # Base multiplier from global aggressiveness setting
   base_multiplier = case FILTER_AGGRESSIVENESS
                    when "LOW" then 0.5
@@ -183,21 +187,21 @@ def volatility_adjusted_trend(trend, candles_5m, current_price, confidence)
   
   case trend
   when 'uptrend'
-    actual_distance = current_price - short_ma
+    actual_distance = current_price - ma_to_use
     if actual_distance >= required_distance
-      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, Short MA=#{short_ma.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition PASSED")
+      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, #{ma_name}=#{ma_to_use.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition PASSED")
       return 'uptrend'
     else
-      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, Short MA=#{short_ma.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition FAILED (price not above MA by required distance)")
+      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, #{ma_name}=#{ma_to_use.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition FAILED (price not above MA by required distance)")
       return 'sideways'
     end
   when 'downtrend'
-    actual_distance = short_ma - current_price
+    actual_distance = ma_to_use - current_price
     if actual_distance >= required_distance
-      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, Short MA=#{short_ma.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition PASSED")
+      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, #{ma_name}=#{ma_to_use.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition PASSED")
       return 'downtrend'
     else
-      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, Short MA=#{short_ma.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition FAILED (price not below MA by required distance)")
+      log("VOLATILITY FILTER DETAILS: ATR=#{atr.round(2)}, Required Distance=#{required_distance.round(2)} (#{atr_multiplier}× ATR), Price=#{current_price}, #{ma_name}=#{ma_to_use.round(2)}, Actual Distance=#{actual_distance.round(2)} - Condition FAILED (price not below MA by required distance)")
       return 'sideways'
     end
   else
