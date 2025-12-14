@@ -682,15 +682,9 @@ end
       if decision && decision[:trade_type]
         trade_type = decision[:trade_type]
         multiplier = decision[:multiplier]
-        # EMERGENCY RSI BLOCK - Should never trade at extreme RSI levels
-        if (trade_type == 'ORDER_TYPE_BUY' && enhanced_analysis[:rsi] >= 67) || 
-          (trade_type == 'ORDER_TYPE_SELL' && enhanced_analysis[:rsi] <= 33)
-          log("🚫 EMERGENCY RSI BLOCK: RSI #{enhanced_analysis[:rsi]} too extreme for #{trade_type}")
-        else
-          dynamic_lot_size = initial_lot_size.to_f * multiplier
-          take_profit = enhanced_analysis[:consolidation_bypassed] ? 100 : 1000
-          place_trade(trade_type, dynamic_lot_size, take_profit, true)
-        end
+        dynamic_lot_size = initial_lot_size.to_f * multiplier
+        take_profit = enhanced_analysis[:consolidation_bypassed] ? 100 : 1000
+        place_trade(trade_type, dynamic_lot_size, take_profit, true)
       else
         log("Enhanced analysis: No trade (low confidence)")
       end
