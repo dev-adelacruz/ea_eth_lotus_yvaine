@@ -458,11 +458,11 @@ def enhanced_trend_analysis
   confidence = 'low'
   confidence_reason = ''
   
-  if uptrend_count == 3 && rsi_5m < 70
+  if uptrend_count == 3 && rsi_5m < 75
     trend = 'uptrend'
     confidence = 'high'
     confidence_reason = 'All 3 timeframes agree on uptrend, RSI not overbought'
-  elsif downtrend_count == 3 && rsi_5m > 30
+  elsif downtrend_count == 3 && rsi_5m > 25
     trend = 'downtrend'
     confidence = 'high'
     confidence_reason = 'All 3 timeframes agree on downtrend, RSI not oversold'
@@ -470,10 +470,10 @@ def enhanced_trend_analysis
     # Sideways or conflicting
     if total_agreements == 0
       confidence_reason = 'All timeframes show sideways movement'
-    elsif uptrend_count >= 2 && rsi_5m >= 70
-      confidence_reason = "Majority uptrend but RSI #{rsi_5m} >= 70 (overbought)"
-    elsif downtrend_count >= 2 && rsi_5m <= 30
-      confidence_reason = "Majority downtrend but RSI #{rsi_5m} <= 30 (oversold)"
+    elsif uptrend_count >= 2 && rsi_5m >= 75
+      confidence_reason = "Majority uptrend but RSI #{rsi_5m} >= 75 (overbought)"
+    elsif downtrend_count >= 2 && rsi_5m <= 25
+      confidence_reason = "Majority downtrend but RSI #{rsi_5m} <= 25 (oversold)"
     else
       confidence_reason = 'Conflicting timeframe signals (require all 3 timeframes aligned)'
     end
