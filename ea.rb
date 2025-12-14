@@ -42,7 +42,7 @@ ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trad
 ENABLE_CONSOLIDATION_FILTER = true      # Filter out trades during extreme consolidation
 ENABLE_VOLATILITY_FILTER = true         # Adjust for high volatility whipsaws
 ENABLE_4H_CONFIRMATION = false          # Require 4H timeframe alignment (default false per user request)
-FILTER_AGGRESSIVENESS = "MEDIUM"        # LOW, MEDIUM, HIGH (trade frequency vs quality)
+FILTER_AGGRESSIVENESS = "LOW"           # LOW, MEDIUM, HIGH (trade frequency vs quality)
 
 HEADERS = {
   'auth-token' => "#{API_KEY}",
