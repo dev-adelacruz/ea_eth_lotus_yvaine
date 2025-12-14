@@ -478,13 +478,20 @@ def enhanced_trend_analysis
   # Apply advanced filters
   original_trend = trend
   original_confidence = confidence
+  consolidation_bypassed = false
 
   # 1. Consolidation filter
   if ENABLE_CONSOLIDATION_FILTER && is_consolidating?(candles_5m, candles_1h)
-    trend = 'sideways'
-    confidence = 'low'
-    confidence_reason = 'Market in consolidation - avoiding trade'
-    log("CONSOLIDATION FILTER: Market is ranging, avoiding trade")
+    # Check if we have strong trend alignment
+    if timeframe_alignment == 'all_uptrend' || timeframe_alignment == 'all_downtrend'
+      consolidation_bypassed = true
+      log("CONSOLIDATION FILTER: Market is ranging, but strong trend (#{timeframe_alignment}) - bypassing filter with reduced TP")
+    else
+      trend = 'sideways'
+      confidence = 'low'
+      confidence_reason = 'Market in consolidation - avoiding trade'
+      log("CONSOLIDATION FILTER: Market is ranging, avoiding trade")
+    end
   end
 
   # 2. Volatility filter (adjust trend if too volatile)
@@ -533,7 +540,8 @@ def enhanced_trend_analysis
     },
     current_price: current_price,
     daily_high: daily_high,
-    daily_low: daily_low
+    daily_low: daily_low,
+    consolidation_bypassed: consolidation_bypassed
   }
 end
 
@@ -676,7 +684,8 @@ end
           log("🚫 EMERGENCY RSI BLOCK: RSI #{enhanced_analysis[:rsi]} too extreme for #{trade_type}")
         else
           dynamic_lot_size = initial_lot_size.to_f * multiplier
-          place_trade(trade_type, dynamic_lot_size, 1000, true)
+          take_profit = enhanced_analysis[:consolidation_bypassed] ? 100 : 1000
+          place_trade(trade_type, dynamic_lot_size, take_profit, true)
         end
       else
         log("Enhanced analysis: No trade (low confidence)")
