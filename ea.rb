@@ -146,7 +146,7 @@ def is_consolidating?(candles_5m, candles_1h)
   
   # Determine threshold based on aggressiveness
   threshold = case FILTER_AGGRESSIVENESS
-              when "LOW" then 0.0257   # 2.57% - filter extreme 20% consolidation (20th percentile)
+              when "LOW" then 0.0200   # 2.00% - filter extreme 10% consolidation (10th percentile)
               when "MEDIUM" then 0.0369 # 3.69% - filter tightest 40% (40th percentile)
               when "HIGH" then 0.0540   # 5.40% - filter tightest 60% (60th percentile)
               else 0.0369
@@ -180,8 +180,8 @@ def volatility_adjusted_trend(trend, candles_5m, current_price, confidence)
                    else 1.0
                    end
   
-  # Adjust multiplier for strong trends (high confidence) - use half the base multiplier
-  atr_multiplier = confidence == 'high' ? (base_multiplier * 0.5) : base_multiplier
+  # Adjust multiplier for strong trends (high confidence) - use 0.1× ATR for strong trends
+  atr_multiplier = confidence == 'high' ? 0.1 : base_multiplier
   
   required_distance = atr * atr_multiplier
   
