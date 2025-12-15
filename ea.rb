@@ -42,6 +42,7 @@ ENABLE_ENHANCED_ANALYSIS = true  # Set to true to use enhanced analysis for trad
 ENABLE_CONSOLIDATION_FILTER = true      # Filter out trades during extreme consolidation
 ENABLE_VOLATILITY_FILTER = true         # Adjust for high volatility whipsaws
 ENABLE_4H_CONFIRMATION = false          # Require 4H timeframe alignment (default false per user request)
+ENABLE_SUPPORT_RESISTANCE_FILTER = true # Block trades near daily support/resistance with extreme RSI
 FILTER_AGGRESSIVENESS = "LOW"           # LOW, MEDIUM, HIGH (trade frequency vs quality)
 
 HEADERS = {
@@ -522,6 +523,31 @@ def enhanced_trend_analysis
       # 4H confirms, increase confidence
       confidence = 'high' if confidence == 'medium'
       confidence_reason = "#{confidence_reason} (confirmed by 4H)"
+    end
+  end
+
+  # 4. Support/Resistance filter (prevent selling at daily low / buying at daily high with extreme RSI)
+  if ENABLE_SUPPORT_RESISTANCE_FILTER && daily_high && daily_low
+    near_low_threshold = 0.01  # 1%
+    near_high_threshold = 0.01 # 1%
+
+    price_to_low_ratio = (current_price - daily_low).abs / daily_low
+    price_to_high_ratio = (daily_high - current_price).abs / daily_high
+
+    # Near daily low with oversold RSI: block sell trades (downtrend)
+    if price_to_low_ratio <= near_low_threshold && rsi_5m < 30 && trend == 'downtrend'
+      trend = 'sideways'
+      confidence = 'low'
+      confidence_reason = "Near daily support (low=#{daily_low}) with oversold RSI (#{rsi_5m}) - avoiding sell trades"
+      log("SUPPORT/RESISTANCE FILTER: Price near daily low, blocking sell trades")
+    end
+
+    # Near daily high with overbought RSI: block buy trades (uptrend)
+    if price_to_high_ratio <= near_high_threshold && rsi_5m > 70 && trend == 'uptrend'
+      trend = 'sideways'
+      confidence = 'low'
+      confidence_reason = "Near daily resistance (high=#{daily_high}) with overbought RSI (#{rsi_5m}) - avoiding buy trades"
+      log("SUPPORT/RESISTANCE FILTER: Price near daily high, blocking buy trades")
     end
   end
 
