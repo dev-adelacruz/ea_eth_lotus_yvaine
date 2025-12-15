@@ -139,14 +139,14 @@ def is_consolidating?(candles_5m, candles_1h)
   return false unless ENABLE_CONSOLIDATION_FILTER
   
   # Use 1h candles for broader consolidation detection
-  return false if candles_1h.nil? || candles_1h.length < 20
+  return false if candles_1h.nil? || candles_1h.length < 10
   
-  bb_width_ratio = bollinger_band_width_ratio(candles_1h, 20, 2.0)
+  bb_width_ratio = bollinger_band_width_ratio(candles_1h, 10, 2.0)
   return false if bb_width_ratio.nil?
   
   # Determine threshold based on aggressiveness
   threshold = case FILTER_AGGRESSIVENESS
-              when "LOW" then 0.0200   # 2.00% - filter extreme 10% consolidation (10th percentile)
+              when "LOW" then 0.0150   # 1.50% - filter extreme 5% consolidation (5th percentile)
               when "MEDIUM" then 0.0369 # 3.69% - filter tightest 40% (40th percentile)
               when "HIGH" then 0.0540   # 5.40% - filter tightest 60% (60th percentile)
               else 0.0369
@@ -551,70 +551,12 @@ end
 
 # Calculate dynamic lot multiplier based on analysis confidence and conditions
 def lot_multiplier(analysis)
-  # Base multiplier for high confidence trades (all 3 timeframes aligned)
-  base_multiplier = 2.0
+  # Fixed multiplier: 1.0 (no bonuses, no risk multiplier)
+  total_multiplier = 1.0
   
-  # RSI bonus: optimal range 40-60 gets bonus
-  rsi_bonus = 0.0
-  if analysis[:rsi] >= 40 && analysis[:rsi] <= 60
-    rsi_bonus = 0.5
-  end
+  log("LOT MULTIPLIER: Fixed at 1.0 (bonuses removed for risk control)")
   
-  # Filter bonus: each enabled filter that passed adds 0.15
-  filter_bonus = 0.0
-  enabled_filters = 0
-  passed_filters = 0
-  
-  # Check consolidation filter
-  if ENABLE_CONSOLIDATION_FILTER
-    enabled_filters += 1
-    # If we have a high confidence trade, consolidation filter must have passed
-    passed_filters += 1 if analysis[:confidence] == 'high'
-  end
-  
-  # Check volatility filter  
-  if ENABLE_VOLATILITY_FILTER
-    enabled_filters += 1
-    # If we have a high confidence trade, volatility filter must have passed
-    passed_filters += 1 if analysis[:confidence] == 'high'
-  end
-  
-  # Calculate filter bonus (0.15 per passed filter)
-  filter_bonus = passed_filters * 0.15
-  
-  # 4H confirmation bonus (if enabled and aligned)
-  four_hour_bonus = 0.0
-  if ENABLE_4H_CONFIRMATION && analysis[:confidence] == 'high'
-    # If 4H confirmation is enabled and we have high confidence, 4H must be aligned
-    four_hour_bonus = 0.5
-  end
-  
-  # Aggressiveness multiplier
-  aggressiveness_multiplier = case FILTER_AGGRESSIVENESS
-                              when "LOW" then 1.0
-                              when "MEDIUM" then 1.1
-                              when "HIGH" then 1.2
-                              else 1.0
-                              end
-  
-  # Calculate total multiplier
-  total_multiplier = (base_multiplier + rsi_bonus + filter_bonus + four_hour_bonus) * aggressiveness_multiplier
-  
-  # Cap at maximum 3.0
-  total_multiplier = [total_multiplier, 3.0].min
-  
-  # Never go below 0.5
-  total_multiplier = [total_multiplier, 0.5].max
-  
-  log("LOT MULTIPLIER CALCULATION:")
-  log("  Base: #{base_multiplier}")
-  log("  RSI bonus (#{analysis[:rsi]}): #{rsi_bonus}")
-  log("  Filter bonus (#{passed_filters}/#{enabled_filters} passed): #{filter_bonus}")
-  log("  4H bonus: #{four_hour_bonus}")
-  log("  Aggressiveness (#{FILTER_AGGRESSIVENESS}): #{aggressiveness_multiplier}")
-  log("  Total multiplier: #{total_multiplier.round(2)}")
-  
-  total_multiplier.round(2)
+  total_multiplier
 end
 
 # Enhanced trading decision with comprehensive logging and dynamic lot sizing
