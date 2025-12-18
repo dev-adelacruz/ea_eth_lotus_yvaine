@@ -534,20 +534,36 @@ def enhanced_trend_analysis
     price_to_low_ratio = (current_price - daily_low).abs / daily_low
     price_to_high_ratio = (daily_high - current_price).abs / daily_high
 
-    # Near daily low with oversold RSI: block sell trades (downtrend)
-    if price_to_low_ratio <= near_low_threshold && rsi_5m < 30 && trend == 'downtrend'
+    # Near daily low OR oversold RSI: block sell trades (downtrend)
+    if trend == 'downtrend' && (price_to_low_ratio <= near_low_threshold || rsi_5m < 30)
       trend = 'sideways'
       confidence = 'low'
-      confidence_reason = "Near daily support (low=#{daily_low}) with oversold RSI (#{rsi_5m}) - avoiding sell trades"
-      log("SUPPORT/RESISTANCE FILTER: Price near daily low, blocking sell trades")
+      if price_to_low_ratio <= near_low_threshold && rsi_5m < 30
+        confidence_reason = "Near daily support (low=#{daily_low}) with oversold RSI (#{rsi_5m}) - avoiding sell trades"
+        log("SUPPORT/RESISTANCE FILTER: Price near daily low and RSI oversold, blocking sell trades")
+      elsif price_to_low_ratio <= near_low_threshold
+        confidence_reason = "Near daily support (low=#{daily_low}) - avoiding sell trades"
+        log("SUPPORT/RESISTANCE FILTER: Price near daily low, blocking sell trades")
+      else
+        confidence_reason = "Oversold RSI (#{rsi_5m}) - avoiding sell trades"
+        log("SUPPORT/RESISTANCE FILTER: RSI oversold, blocking sell trades")
+      end
     end
 
-    # Near daily high with overbought RSI: block buy trades (uptrend)
-    if price_to_high_ratio <= near_high_threshold && rsi_5m > 70 && trend == 'uptrend'
+    # Near daily high OR overbought RSI: block buy trades (uptrend)
+    if trend == 'uptrend' && (price_to_high_ratio <= near_high_threshold || rsi_5m > 70)
       trend = 'sideways'
       confidence = 'low'
-      confidence_reason = "Near daily resistance (high=#{daily_high}) with overbought RSI (#{rsi_5m}) - avoiding buy trades"
-      log("SUPPORT/RESISTANCE FILTER: Price near daily high, blocking buy trades")
+      if price_to_high_ratio <= near_high_threshold && rsi_5m > 70
+        confidence_reason = "Near daily resistance (high=#{daily_high}) with overbought RSI (#{rsi_5m}) - avoiding buy trades"
+        log("SUPPORT/RESISTANCE FILTER: Price near daily high and RSI overbought, blocking buy trades")
+      elsif price_to_high_ratio <= near_high_threshold
+        confidence_reason = "Near daily resistance (high=#{daily_high}) - avoiding buy trades"
+        log("SUPPORT/RESISTANCE FILTER: Price near daily high, blocking buy trades")
+      else
+        confidence_reason = "Overbought RSI (#{rsi_5m}) - avoiding buy trades"
+        log("SUPPORT/RESISTANCE FILTER: RSI overbought, blocking buy trades")
+      end
     end
   end
 
