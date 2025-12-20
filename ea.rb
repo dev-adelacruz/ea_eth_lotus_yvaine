@@ -260,7 +260,7 @@ def place_trade(type, volume, take_profit, relative_pips = false)
     "symbol" => PAIR_SYMBOL,
     "volume" => volume,
     "takeProfit" => take_profit,
-    "comment" => "LOTUS YVAINE BETA 0.0.3"
+    "comment" => "LOTUS YVAINE BETA 0.0.6"
   }
 
   order_data = order_data.merge("takeProfitUnits": "RELATIVE_PIPS") if relative_pips
@@ -292,18 +292,25 @@ def update_trade(position, take_profit)
   end
 end
 
-def update_trades
+def update_trades(atr = nil)
   positions = get_positions
   prices = positions.map{|p| p['openPrice']}.sum
-  take_profit = (prices / (positions.size)) + take_profit_buffer(first_position(positions)['type']).to_f
+  take_profit = (prices / (positions.size)) + take_profit_buffer(first_position(positions)['type'], atr).to_f
 
   positions.each do |position|
     update_trade(position, take_profit)
   end
 end
 
-def take_profit_buffer(trade_type)
-  tp_buffer = (TAKE_PROFIT_BUFFER || 2).to_f
+def take_profit_buffer(trade_type, atr = nil)
+  if atr && ENV['TP_BUFFER_MULTIPLIER']
+    tp_buffer_multiplier = ENV['TP_BUFFER_MULTIPLIER'].to_f
+    tp_buffer = atr * tp_buffer_multiplier
+    log("Using dynamic TP buffer: ATR=#{atr.round(4)}, multiplier=#{tp_buffer_multiplier}, buffer=#{tp_buffer.round(4)}")
+  else
+    tp_buffer = (TAKE_PROFIT_BUFFER || 2).to_f
+    log("Using fixed TP buffer: #{tp_buffer}")
+  end
   trade_type == 'POSITION_TYPE_BUY' ? tp_buffer : (0 - tp_buffer)
 end
 
@@ -662,7 +669,7 @@ end
         next_entry_price = next_potential_position(positions, atr)
         take_profit = next_take_profit(positions, next_entry_price)
         place_trade(trade_type, next_potential_lot_size, take_profit)
-        update_trades # update trades so positions will be accurate and tp will be calculated correctly
+        update_trades(atr) # update trades so positions will be accurate and tp will be calculated correctly
       end
     else
       # Run enhanced analysis for trading decision (once per cycle)
