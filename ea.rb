@@ -308,9 +308,9 @@ def take_profit_buffer(trade_type)
 end
 
 # Function to decide whether to place a trade
-def should_place_trade?(positions)
+def should_place_trade?(positions, atr)
   latest_position = latest_position(positions)
-  next_potential_position = next_potential_position(positions)
+  next_potential_position = next_potential_position(positions, atr)
   next_potential_lot_size = first_position(positions)['volume'] * (positions.size + 1)
   latest_price = latest_position['currentPrice']
   trade_type = latest_position['type']
@@ -324,11 +324,18 @@ def should_place_trade?(positions)
   end
 end
 
-def next_potential_position(positions)
-  if latest_position(positions)['type'] == 'POSITION_TYPE_BUY'
-    latest_position(positions)['openPrice'] - (10 * (positions.size + 1))
+def next_potential_position(positions, atr)
+  if atr.nil?
+    step = 10.0
   else
-    latest_position(positions)['openPrice'] + (10 * (positions.size + 1))
+    multiplier = (ENV['GRID_SPACING_MULTIPLIER'] || '0.5').to_f
+    step = multiplier * atr
+  end
+  step = step.round(2)
+  if latest_position(positions)['type'] == 'POSITION_TYPE_BUY'
+    latest_position(positions)['openPrice'] - (step * (positions.size + 1))
+  else
+    latest_position(positions)['openPrice'] + (step * (positions.size + 1))
   end
 end
 
@@ -644,11 +651,16 @@ end
       end
     
     if positions.size > 0
-      if should_place_trade?(positions)
+      # Fetch 5m candles for ATR calculation
+      candles_5m = get_candles('5m')
+      atr = calculate_atr(candles_5m, 14) if candles_5m
+
+      if should_place_trade?(positions, atr)
         # Define variables for martingale trading
         trade_type = latest_position(positions)['type'] == 'POSITION_TYPE_BUY' ? 'ORDER_TYPE_BUY' : 'ORDER_TYPE_SELL'
         next_potential_lot_size = first_position(positions)['volume'] * (positions.size + 1)
-        take_profit = next_take_profit(positions, next_potential_position(positions))
+        next_entry_price = next_potential_position(positions, atr)
+        take_profit = next_take_profit(positions, next_entry_price)
         place_trade(trade_type, next_potential_lot_size, take_profit)
         update_trades # update trades so positions will be accurate and tp will be calculated correctly
       end
